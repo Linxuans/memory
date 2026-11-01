@@ -24,6 +24,7 @@ import {
   renderGlobalIndex,
   renderProject,
   reindexAll,
+  withLock,
   resolveProjectRef,
   scanNotes,
   writeCatalog,
@@ -46,7 +47,6 @@ function relPath(root, file) {
 }
 
 function allSlugs(root) {
-  void discoverProjects
   return Object.keys(loadRegistry(root).records)
 }
 
@@ -63,6 +63,13 @@ function currentProject(root, info, ref) {
 }
 
 /** Existing note id whose normalized title matches, for duplicate detection on write. */
+/** Note id from optional user input: sanitised, never collapsed to the shared "untitled". */
+function noteIdFrom(value) {
+  if (typeof value !== 'string' || value.trim().length === 0) return undefined
+  const slug = slugify(value)
+  return slug === 'untitled' ? undefined : slug
+}
+
 function findSameTitle(root, slug, title) {
   const wanted = String(title).trim().toLowerCase()
   for (const note of scanNotes(root, slug)) {
@@ -113,7 +120,7 @@ function pendingCount(root, slug) {
 
 function journalMonths(root, slug) {
   try {
-    return readdirSync(storePath(root, 'projects/' + slug + '/journal')).filter((name) => name.endsWith('.md')).length
+    return readdirSync(storePath(root, 'projects/' + slug + '/journal')).filter((name) => /^\d{4}-\d{2}\.md$/.test(name)).length
   } catch {
     return 0
   }
@@ -308,8 +315,8 @@ export function buildTools(root, resolveAgent) {
         ensureGlobalFiles(root)
         const file = args.file === 'LESSONS.md' ? 'LESSONS.md' : 'PREFERENCES.md'
         const target = storePath(root, 'global/' + file)
-        if (args.replace === true) writeFileSync(target, args.content.trim() + '\n', 'utf8')
-        else appendFileSync(target, '\n- ' + args.content.trim().replace(/^\s*[-*]\s*/, '').replace(/\n+/g, ' ') + '\n', 'utf8')
+        if (args.replace === true) withLock(target, () => writeFileSync(target, args.content.trim() + '\n', 'utf8'))
+        else withLock(target, () => appendFileSync(target, '\n- ' + args.content.trim().replace(/^\s*[-*]\s*/, '').replace(/\n+/g, ' ') + '\n', 'utf8'))
         renderGlobalIndex(root)
         return 'wrote global/' + file + ' (' + target + '). Global rules apply to every project; the global index was refreshed.'
       }
@@ -321,13 +328,14 @@ export function buildTools(root, resolveAgent) {
         return 'journaled to ' + relPath(root, file) + ' for project ' + record.slug + '. Call memory_end at session close to also distill notes.'
       }
       if (kind === 'pending') {
-        writeFileSync(storePath(root, 'projects/' + record.slug + '/pending.md'), '# Pending\n\n' + args.content.trim() + '\n', 'utf8')
+        const pendingFile = storePath(root, 'projects/' + record.slug + '/pending.md')
+        withLock(pendingFile, () => writeFileSync(pendingFile, '# Pending\n\n' + args.content.trim() + '\n', 'utf8'))
         const rendered = renderProject(root, record.slug)
         return 'pending list replaced for ' + record.slug + ' (' + rendered.pending + ' open items). CARD.md and MEMORY.md refreshed.'
       }
       const duplicate = !args.id && typeof args.title === 'string' ? findSameTitle(root, record.slug, args.title) : null
       const written = writeNote(root, record.slug, {
-        id: args.id ? slugify(args.id) : undefined,
+        id: noteIdFrom(args.id),
         title: args.title,
         type: args.type,
         status: args.status,
@@ -336,12 +344,15 @@ export function buildTools(root, resolveAgent) {
         body: args.content,
         sources: args.sources,
       })
-      const replaced = Array.isArray(args.supersedes) ? patchNotes(root, record.slug, args.supersedes, { status: 'superseded', superseded_by: written.id }) : []
+      const requested = Array.isArray(args.supersedes) ? args.supersedes.map(String) : []
+      const replaced = requested.length > 0 ? patchNotes(root, record.slug, requested, { status: 'superseded', superseded_by: written.id }) : []
+      const missing = requested.filter((id) => !replaced.includes(id))
       const rendered = renderProject(root, record.slug)
       writeCatalog(root)
       const notes = []
       notes.push((written.created ? 'created' : 'updated') + ' note projects/' + record.slug + '/notes/' + written.id + '.md (' + (args.type ?? 'fact') + '; ' + rendered.notes + ' notes in project)')
       if (replaced.length > 0) notes.push('superseded: ' + replaced.join(', '))
+      if (missing.length > 0) notes.push('NOTE: these supersedes ids were not found: ' + missing.join(', '))
       if (duplicate) notes.push('WARNING: a note with the same title already exists (' + duplicate + '). Pass id="' + duplicate + '" to revise it, or supersedes=["' + duplicate + '"] to replace it.')
       notes.push('index and card refreshed')
       return notes.join('. ').replace(/\\.\\. /g, '. ')
@@ -382,16 +393,16 @@ export function buildTools(root, resolveAgent) {
         return lines.join('\n')
       }
       const rows = []
-      for (const slug of allSlugs(root)) {
+      for (const slug of [...new Set([...allSlugs(root), ...discoverProjects(root)])]) {
         const record = registry.records[slug] ?? { slug, name: slug, root: null, aliases: [], lastActive: '' }
-        rows.push({ slug, record, notes: scanNotes(root, slug).length, pending: pendingCount(root, slug) })
+        rows.push({ slug, record, notes: scanNotes(root, slug).length, pending: pendingCount(root, slug), registered: Boolean(registry.records[slug]) })
       }
       rows.sort((a, b) => String(b.record.lastActive ?? '').localeCompare(String(a.record.lastActive ?? '')))
       lines.push('')
       lines.push('# Projects (' + rows.length + ', newest activity first)')
       if (rows.length === 0) lines.push('_No projects recorded yet; the first memory_write creates one._')
       for (const row of rows) {
-        lines.push('- ' + row.slug + '  notes:' + row.notes + '  pending:' + row.pending + '  last:' + (row.record.lastActive ?? '-') + '  root:' + (row.record.root ?? '?'))
+        lines.push('- ' + row.slug + '  notes:' + row.notes + '  pending:' + row.pending + '  last:' + (row.record.lastActive ?? '-') + '  root:' + (row.record.root ?? '?') + (row.registered ? '' : '  (unregistered: run memory_reindex to adopt)'))
       }
       lines.push('')
       lines.push('global rules: ' + storePath(root, 'global/PREFERENCES.md') + ' , ' + storePath(root, 'global/LESSONS.md'))
@@ -444,7 +455,7 @@ export function buildTools(root, resolveAgent) {
       for (const note of Array.isArray(args.notes) ? args.notes : []) {
         if (!note || typeof note.title !== 'string' || typeof note.content !== 'string') continue
         const written = writeNote(root, record.slug, {
-          id: note.id ? slugify(note.id) : undefined,
+          id: noteIdFrom(note.id),
           title: note.title,
           type: note.type,
           tags: note.tags,
@@ -455,7 +466,8 @@ export function buildTools(root, resolveAgent) {
       }
       if (Array.isArray(args.pending)) {
         const body = args.pending.length > 0 ? args.pending.map((item) => '- ' + String(item).trim()).join('\n') : '_Nothing pending._'
-        writeFileSync(storePath(root, 'projects/' + record.slug + '/pending.md'), '# Pending\n\n' + body + '\n', 'utf8')
+        const pendingFile = storePath(root, 'projects/' + record.slug + '/pending.md')
+        withLock(pendingFile, () => writeFileSync(pendingFile, '# Pending\n\n' + body + '\n', 'utf8'))
       }
       const rendered = renderProject(root, record.slug)
       writeCatalog(root)

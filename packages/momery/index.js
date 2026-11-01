@@ -48,12 +48,14 @@ export function apply(ctx, config = {}) {
   const resolveAgent = async (exec) => {
     const agent = exec?.agent
     if (!agent) return identify(process.cwd())
-    const cached = projects.get(agent)
-    if (cached) return cached
-
-    let cwd = null
     const workingDirectory = hasService(ctx, 'workingDirectory') ? ctx.get('workingDirectory') : undefined
-    if (workingDirectory) {
+    // The working directory can change mid-session (`cd`); the cache is keyed on it.
+    const current = workingDirectory ? workingDirectory.get(agent) : undefined
+    const cached = projects.get(agent)
+    if (cached && (current === undefined || current === cached.cwd)) return cached
+
+    let cwd = current ?? null
+    if (workingDirectory && cwd === null) {
       try {
         cwd = await workingDirectory.ensure(agent, exec?.signal)
       } catch {
@@ -61,8 +63,9 @@ export function apply(ctx, config = {}) {
       }
     }
     const info = projectForAgent(root, cwd ?? process.cwd())
-    projects.set(agent, info)
-    return info
+    const entry = { ...info, cwd: cwd ?? info.rootPath }
+    projects.set(agent, entry)
+    return entry
   }
 
   ctx.effect(() => {

@@ -143,6 +143,9 @@ slug 由项目根路径派生：`F:\work\momery` → `f-work-momery`。项目根
 - **CARD.md 出现 `CARD TRUNCATED`？** 待办或规则太长了。跑 `memory_curate`，精简 `pending.md`，
   归档旧笔记，再 `memory_reindex`。
 - **规则过时了？** 直接 `memory_curate --rules "..."` 覆盖，旧规则不会残留。
+- **卡片里出现 `+N more`？** 表示规则或待办超过 6 条被折叠，完整内容在 `MEMORY.md` 与 `pending.md`。
+- **`memory_status` 里显示 `(unregistered)`？** 磁盘上有项目目录但注册表没有它（例如从别处拷贝的存储），跑一次 `memory_reindex` 收养即可。
+- **`cd` 到别的仓库后记忆写错地方？** 已修复：插件按会话当前目录判断项目，切目录即切换记忆目标。
 - **日志太长？** `memory_distill`；原始日志仍保留，摘要只是新增文件与脚注。
 - **两个会话同时写？** 写操作有文件锁（30 秒过期、60 秒超时），不会互相覆盖；极端情况下会报
   `memory store is locked by another writer`，稍后重试即可。

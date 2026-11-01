@@ -28,6 +28,7 @@ Human-editable plain text. Every file is Markdown or JSON, sized for a diff.
     index.json            project registry: slug -> root path, aliases, last activity
 `
 
+const MEMORY_MAX_NOTES_PER_TYPE = 40
 const CARD_MAX_LINES = 40
 const CARD_MAX_CHARS = 2400
 
@@ -191,6 +192,7 @@ export function ensureProject(root, { slug, rootPath, name, aliases }) {
     created = true
   }
   touchProject(root, { slug, rootPath, name, aliases })
+  if (created) renderProject(root, slug)
   return created
 }
 
@@ -427,9 +429,11 @@ export function readStoreFile(root, relPath, maxBytes) {
   const file = safeJoin(root, relPath)
   const stats = statSync(file)
   if (!stats.isFile()) throw new Error('not a regular file: ' + relPath)
-  const raw = readFileSync(file, 'utf8')
-  if (Buffer.byteLength(raw, 'utf8') <= maxBytes) return { text: raw, truncated: false, bytes: stats.size, path: file }
-  return { text: raw.slice(0, maxBytes), truncated: true, bytes: stats.size, path: file }
+  const buffer = readFileSync(file)
+  if (buffer.length <= maxBytes) return { text: buffer.toString('utf8'), truncated: false, bytes: stats.size, path: file }
+  // Slice bytes, then drop a multi-byte character split by the cut instead of emitting U+FFFD.
+  const text = buffer.subarray(0, maxBytes).toString('utf8').replace(/\uFFFD+$/, '')
+  return { text, truncated: true, bytes: stats.size, path: file }
 }
 
 /** Regenerate MEMORY.md and CARD.md for one project. */
@@ -460,9 +464,13 @@ export function renderProject(root, slug) {
   lines.push('## Notes by type', '')
   for (const type of Object.keys(byType).sort()) {
     lines.push('### ' + type, '')
-    for (const note of byType[type]) {
+    const list = byType[type]
+    for (const note of list.slice(0, MEMORY_MAX_NOTES_PER_TYPE)) {
       const tags = note.tags.length > 0 ? ' `' + note.tags.join('`, `') + '`' : ''
       lines.push('- [' + note.title + '](notes/' + note.id + '.md) - ' + summarize(note.body) + tags + ' _(' + (note.updated || note.created || '-') + ')_')
+    }
+    if (list.length > MEMORY_MAX_NOTES_PER_TYPE) {
+      lines.push('- _... and ' + (list.length - MEMORY_MAX_NOTES_PER_TYPE) + ' more ' + type + ' notes; use memory_search to reach them._')
     }
     lines.push('')
   }
@@ -488,10 +496,12 @@ function buildCard(record, notes, pending, purpose, rules, slug) {
   if (rules.length > 0) {
     lines.push('', 'rules:')
     for (const rule of rules.slice(0, 6)) lines.push('- ' + oneLine(rule))
+    if (rules.length > 6) lines.push('- ... +' + (rules.length - 6) + ' more rules in MEMORY.md')
   }
   if (pending.length > 0) {
     lines.push('', 'pending:')
     for (const item of pending.slice(0, 6)) lines.push('- ' + oneLine(item))
+    if (pending.length > 6) lines.push('- ... +' + (pending.length - 6) + ' more in pending.md')
   }
   const recent = notes.slice(0, 8)
   if (recent.length > 0) {

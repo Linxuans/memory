@@ -37,12 +37,12 @@ catalog.jsonl             one JSON line per note, machine-readable
 
 ## Install
 
-Current release: **[v1.1.0](https://github.com/Linxuans/memory/releases/tag/v1.1.0)**.
+Current release: **[v1.1.1](https://github.com/Linxuans/memory/releases/tag/v1.1.1)**.
 
 Installed in this profile from git, pinned to the tag:
 
 ```
-plugin_manager install_bundle "git+https://github.com/Linxuans/memory.git#path:packages/momery&semver:1.1.0"
+plugin_manager install_bundle "git+https://github.com/Linxuans/memory.git#path:packages/momery&semver:1.1.1"
 ```
 
 A local checkout can be linked instead while developing, which hot-reloads code changes:
@@ -109,11 +109,11 @@ git-able.
 
 ## Verified
 
-- Installed from git (`git+https://github.com/Linxuans/memory.git#path:packages/momery&semver:1.1.0`)
+- Installed from git (`git+https://github.com/Linxuans/memory.git#path:packages/momery&semver:1.1.1`)
   and active in the `desktop` profile.
 - All nine tools published to the model; `memory_curate`, `memory_distill`, cross-project
   reads, supersession, locks, card budget, and reindex exercised against a live store.
-- `v1.0.0` and `v1.1.0` tagged and released on GitHub.
+- `v1.0.0`, `v1.1.0`, and `v1.1.1` tagged and released on GitHub.
 
 ## Limits
 

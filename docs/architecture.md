@@ -85,14 +85,18 @@ greppable. `id` doubles as the filename stem.
 
 `CARD.md` is capped at 40 lines / 2400 characters: purpose, up to six rules, up to six
 pending items, up to eight key notes with pointers. It is the always-on surface, so a
-card that grows stops being a card.
+card that grows stops being a card. Omission is never silent: a truncated list ends with
+`... +N more rules in MEMORY.md` or `... +N more in pending.md`, and a card that still
+overflows ends with an explicit `CARD TRUNCATED` notice.
 
 ### Index
 
 `MEMORY.md` is the human and agent entry point: identity, purpose, durable rules, notes
 grouped by type, pending, recent journal. The tables are regenerated; the Purpose and
 Durable rules prose is preserved across regeneration (read back from the existing file
-before writing).
+before writing). The per-type note tables stop at 40 entries and say how many more exist,
+so a long-lived project cannot turn its own index into a context bomb; `memory_search`
+reaches the rest.
 
 ### Registry and catalog
 
@@ -114,7 +118,9 @@ project marker (`.git`, `package.json`, `pyproject.toml`, `Cargo.toml`, `go.mod`
   alias can bridge the difference.
 
 The registry stores the real root path, so a moved checkout can be re-pointed without
-renaming the folder.
+renaming the folder. The plugin caches the resolved project per agent and invalidates
+that cache when the session directory changes, so cd to another repository mid-session
+switches memory targets instead of writing into the old project.
 
 ## Retrieval
 
@@ -161,7 +167,8 @@ Three mechanisms, in order of preference:
 2. **Bounded call** (`memory_brief`): the card plus ranked notes, typically 400-900
    tokens. Called at task start, after a reset, or when the project feels unfamiliar.
 3. **Full read** (`memory_read`): exact file content, with offset and byte caps for
-   large files. Called only for hits that change a decision.
+   large files. Called only for hits that change a decision. The byte cap is applied to
+   the encoded bytes, not characters, and never emits a half-decoded multi-byte character.
 
 The skill (`momery/SKILL.md`) is progressive disclosure: the catalog shows a one-line
 description, and the full protocol loads only when the model decides it needs the

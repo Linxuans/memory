@@ -7,7 +7,7 @@ for AI coding agents, plus its skill, CLI, and docs.
 
 ## Map
 
-- `packages/momery/index.js` - plugin entry: resolves the store root, registers the seven
+- `packages/momery/index.js` - plugin entry: resolves the store root, registers the nine
   `memory_*` tools, the `momery` runtime skill, and the always-on prompt section.
 - `packages/momery/lib/note.js` - frontmatter parse/serialize, ids, slugs.
 - `packages/momery/lib/store.js` - layout, registry, scan cache, locks, generated indexes.
@@ -34,6 +34,12 @@ for AI coding agents, plus its skill, CLI, and docs.
   window inside the lock.
 - The store root is user data and is **not** in this repo. Tests must use a temp root and
   clean it up.
+- A session can cd; the per-agent project cache is keyed on the working directory and must
+  be invalidated when it changes.
+- Truncation is announced, never silent: card lists end with +N more, the card itself with
+  CARD TRUNCATED, and MEMORY.md tables cap at 40 entries per type.
+- Byte caps slice encoded bytes, not JS characters, and must not emit U+FFFD.
+- Global rule files and pending.md are written under the same lock as notes.
 
 ## Verify a change
 
