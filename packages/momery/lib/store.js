@@ -338,7 +338,54 @@ export function writeNote(root, slug, { id, title, type, status, tags, confidenc
   return { id: noteId, path: file, created: existing.data.created === undefined }
 }
 
-/** Append one dated block to this month's journal. */
+/** Split one journal month file into its header/body and its generated digest footer. */
+export function splitJournal(text) {
+  const source = String(text ?? '')
+  const marker = '\n## Digest'
+  const index = source.indexOf(marker)
+  if (index === -1) return { body: source.trimEnd(), digest: '' }
+  return { body: source.slice(0, index).trimEnd(), digest: source.slice(index + 1) }
+}
+
+/**
+ * One-line takeaway of a journal block: the first substantive sentence when it stands
+ * alone, otherwise the first line plus a bounded amount of continuation.
+ */
+export function headline(text, width = 160) {
+  const lines = String(text ?? '')
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/^#{1,6}\s+/gm, '')
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter((line) => line.length > 0)
+  if (lines.length === 0) return ''
+  const first = lines[0]
+  const sentence = /^(.+?[.!?。！？])(?:\s|$)/.exec(first)
+  if (sentence && (sentence[1].length >= 40 || first.length <= 60)) {
+    return sentence[1].length <= width ? sentence[1] : sentence[1].slice(0, width - 1) + '...'
+  }
+  const merged = lines.map((line) => line.replace(/^[-*]\s+/, '')).join(' - ')
+  return merged.length <= width ? merged : merged.slice(0, width - 1).trimEnd() + '...'
+}
+
+/** Compact digest lines for every `## <stamp>` block in a journal body. */
+export function digestLines(body, limit = 12) {
+  const blocks = []
+  const pattern = /^##\s+(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})\s*$/gm
+  const starts = []
+  let match
+  while ((match = pattern.exec(body)) !== null) starts.push({ stamp: match[1], index: match.index, end: match.index + match[0].length })
+  for (let i = 0; i < starts.length; i++) {
+    const start = starts[i]
+    const end = i + 1 < starts.length ? starts[i + 1].index : body.length
+    const text = body.slice(start.end, end).trim()
+    if (text.length === 0) continue
+    blocks.push('- ' + start.stamp + ' - ' + headline(text) + ' _(' + text.split(/\r?\n/).length + ' lines)_')
+  }
+  return blocks.slice(Math.max(0, blocks.length - limit))
+}
+
+/** Append one dated block to this month's journal, refreshing its digest footer. */
 export function appendJournal(root, slug, text) {
   const dir = journalDir(root, slug)
   mkdirSync(dir, { recursive: true })
@@ -346,9 +393,14 @@ export function appendJournal(root, slug, text) {
   const month = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0')
   const file = safeJoin(root, 'projects', slug, 'journal', month + '.md')
   const block = '\n## ' + stamp(now) + '\n\n' + String(text).trim() + '\n'
-  withLock(file, () => {
-    if (!existsSync(file)) writeFileSync(file, '# Journal ' + month + '\n', 'utf8')
-    writeFileSync(file, block, { encoding: 'utf8', flag: 'a' })
+  const target = file
+  withLock(target, () => {
+    const existing = existsSync(target) ? readFileSync(target, 'utf8') : '# Journal ' + month + '\n'
+    const { body } = splitJournal(existing)
+    const nextBody = body.trimEnd() + '\n' + block
+    const digest = digestLines(nextBody)
+    const footer = digest.length > 0 ? '\n## Digest\n\n_Generated. One line per session; rewrite the full journal only by hand._\n\n' + digest.join('\n') + '\n' : ''
+    writeFileSync(target, nextBody.trimEnd() + '\n' + footer, 'utf8')
   })
   return file
 }
@@ -517,6 +569,114 @@ export function ensureGlobalFiles(root) {
       'utf8',
     )
   }
+}
+
+/** Replace one Markdown section (heading + its body) and keep every other section intact. */
+export function replaceSection(text, heading, bodyText) {
+  const source = String(text ?? '')
+  const lines = source.split(/\r?\n/)
+  const pattern = new RegExp('^#{1,6}\\s+' + heading + '\\s*$', 'i')
+  const start = lines.findIndex((line) => pattern.test(line.trim()))
+  const rendered = ['## ' + heading, '', String(bodyText ?? '').trim()]
+  if (start === -1) return source.trimEnd() + '\n\n' + rendered.join('\n') + '\n'
+  let end = lines.length
+  for (let index = start + 1; index < lines.length; index++) {
+    if (/^#{1,6}\s+/.test(lines[index])) {
+      end = index
+      break
+    }
+  }
+  return [...lines.slice(0, start), ...rendered, '', ...lines.slice(end)].join('\n').replace(/\n{3,}/g, '\n\n').trimEnd() + '\n'
+}
+
+/**
+ * Write curated prose into MEMORY.md: `purpose` replaces the Purpose section when given,
+ * `rules` replaces the Durable rules list. The generated tables are untouched, and the
+ * card is rebuilt afterwards so the always-on surface reflects the curation immediately.
+ */
+export function curateProject(root, slug, { purpose, rules }) {
+  ensureProject(root, { slug })
+  const file = join(projectDir(root, slug), 'MEMORY.md')
+  let text = readTextIfExists(file)
+  if (typeof purpose === 'string' && purpose.trim().length > 0) text = replaceSection(text, 'Purpose', purpose.trim())
+  if (Array.isArray(rules)) {
+    const bullets = rules.map((rule) => String(rule ?? '').trim()).filter((rule) => rule.length > 0)
+    text = replaceSection(text, 'Durable rules', bullets.length > 0 ? bullets.map((rule) => '- ' + rule).join('\n') : '_None yet._')
+  }
+  withLock(file, () => writeFileSync(file, text, 'utf8'))
+  return renderProject(root, slug)
+}
+
+/** Infer a note type from content when the writer did not say. Pure text heuristics. */
+export function inferNoteType(text) {
+  const value = String(text ?? '')
+  if (/(^|\n)\s*[-*]\s*\[[ xX]\]/.test(value) || /\b(todo|next action|待办|下一步)\b/i.test(value)) return 'task'
+  if (/(决定|决策|采用|选择|instead of|we chose|decision is)/i.test(value)) return 'decision'
+  if (/(问题|故障|报错|错误|bug|error|failed|失败|broken|根因|root cause)/i.test(value)) return 'issue'
+  if (/(偏好|喜欢|prefer|always use|never use|习惯)/i.test(value)) return 'preference'
+  if (/(步骤|流程|模式|惯例|pattern|workflow|convention)/i.test(value)) return 'pattern'
+  return 'observation'
+}
+
+/** Extract the points of a journal body worth promoting into notes: one per block. */
+export function promoteCandidates(body, limit = 10) {
+  const blocks = []
+  const pattern = /^##\s+(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})\s*$/gm
+  const starts = []
+  let match
+  while ((match = pattern.exec(body)) !== null) starts.push({ stamp: match[1], index: match.index, end: match.index + match[0].length })
+  for (let i = 0; i < starts.length; i++) {
+    const start = starts[i]
+    const end = i + 1 < starts.length ? starts[i + 1].index : body.length
+    const text = body.slice(start.end, end).trim()
+    if (text.length === 0) continue
+    const bullets = text
+      .split(/\r?\n/)
+      .map((line) => /^[-*]\s+(.*)$/.exec(line.trim()))
+      .filter(Boolean)
+      .map((found) => found[1].trim())
+      .filter((line) => line.length >= 12)
+      .slice(0, 3)
+    const title = headline(text)
+    const points = bullets.filter((point) => point !== title)
+    blocks.push({
+      stamp: start.stamp,
+      headline: title,
+      points: points.length > 0 ? points : [title],
+      type: inferNoteType(text),
+    })
+  }
+  return blocks.slice(Math.max(0, blocks.length - limit))
+}
+
+/**
+ * Distill one project's journal: rewrite the short digest footer in each month file,
+ * write a full `YYYY-MM.digest.md` beside it, and optionally return promotion candidates.
+ */
+export function distillJournal(root, slug, { write = true, promote = false } = {}) {
+  const dir = journalDir(root, slug)
+  if (!existsSync(dir)) return { months: [], candidates: [] }
+  const files = readdirSync(dir)
+    .filter((name) => /^\d{4}-\d{2}\.md$/.test(name))
+    .sort()
+  const months = []
+  const candidates = []
+  for (const name of files) {
+    const file = join(dir, name)
+    const source = readFileSync(file, 'utf8')
+    const { body } = splitJournal(source)
+    const digest = digestLines(body, 100)
+    months.push({ month: name.replace(/\.md$/, ''), sessions: digest.length })
+    if (promote) candidates.push(...promoteCandidates(body))
+    if (write) {
+      const footer = digest.length > 0 ? '\n## Digest\n\n_Generated. One line per session; rewrite the full journal only by hand._\n\n' + digestLines(body, 12).join('\n') + '\n' : ''
+      const digestFile = join(dir, name.replace(/\.md$/, '.digest.md'))
+      const header = '# Journal digest - ' + name.replace(/\.md$/, '') + '\n'
+      withLock(digestFile, () => writeFileSync(digestFile, header + '\n' + (digest.length > 0 ? digest.join('\n') : '_No sessions this month._') + '\n', 'utf8'))
+      withLock(file, () => writeFileSync(file, body.trimEnd() + '\n' + footer, 'utf8'))
+    }
+  }
+  return { months, candidates }
 }
 
 function readTextIfExists(file) {

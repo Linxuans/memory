@@ -58,6 +58,35 @@ carry the retrieval handles: module names, technologies, exact error strings.
 Update instead of duplicating: search first, then pass `id` to revise. Mark the old
 note `status:"superseded"` when a new one replaces it.
 
+## Keep the card sharp (`memory_curate`)
+
+`CARD.md` is what every future session sees first, so it must stay short and current.
+After a burst of decisions - or when the card reports truncation - rewrite its two
+hand-owned sections in one call:
+
+    memory_curate purpose="<one paragraph: what this project is for, what done means>"
+                 rules=["Use pnpm, never npm", "Deploys go to Fly sin", ...]
+
+Rules are imperatives derived from the notes, most important first; six is plenty.
+Omit `rules` to let the store synthesize a list from decision/preference/issue titles,
+then refine whatever it produced. `dry_run=true` shows the result without writing.
+
+Curation is a judgment step, not a log: drop rules that no longer hold, merge
+duplicates, and state the constraint rather than the incident.
+
+## Tidy the history (`memory_distill`)
+
+The journal is narrative and grows forever. `memory_distill` rewrites each month's
+short digest footer, writes `journal/YYYY-MM.digest.md` beside the raw log, and with
+`promote=true` returns candidates (headline, bullet points, inferred type) that are
+worth turning into notes:
+
+    memory_distill promote=true
+
+Promote the two or three blocks that changed how the project works; leave the rest as
+history. Write each promotion with `memory_write`, citing the journal month in
+`sources`. Re-running distillation is safe: it rewrites only generated digest content.
+
 ## Two axes of scope
 
 - **Project notes** (default) answer questions about this repository.

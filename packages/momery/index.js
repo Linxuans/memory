@@ -21,7 +21,7 @@ export const name = 'momery'
 export const inject = ['tools', 'systemPrompt', 'skills', 'workingDirectory']
 
 const PROMPT_SECTION = 'tool:momery'
-const TOOL_NAMES = ['memory_brief', 'memory_search', 'memory_read', 'memory_write', 'memory_status', 'memory_end', 'memory_reindex']
+const TOOL_NAMES = ['memory_brief', 'memory_search', 'memory_read', 'memory_write', 'memory_status', 'memory_end', 'memory_curate', 'memory_distill', 'memory_reindex']
 
 /** Read a config flag without throwing on unusual values. */
 function flag(value, fallback) {

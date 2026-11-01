@@ -28,7 +28,8 @@ projects/<slug>/
   MEMORY.md               generated index (entry point)
   CARD.md                 <=40 line always-on card
   notes/<id>.md           durable knowledge, one topic per file
-  journal/YYYY-MM.md      append-only session log
+  journal/YYYY-MM.md      append-only session log + generated digest footer
+  journal/YYYY-MM.digest.md  one-line-per-session digest
   pending.md              open questions
 index.json                project registry (root path, aliases, activity)
 catalog.jsonl             one JSON line per note, machine-readable
@@ -36,10 +37,15 @@ catalog.jsonl             one JSON line per note, machine-readable
 
 ## Install
 
-Current release: **[v1.0.0](https://github.com/Linxuans/memory/releases/tag/v1.0.0)**.
+Current release: **[v1.1.0](https://github.com/Linxuans/memory/releases/tag/v1.1.0)**.
 
-The bundle is already installed in the `desktop` profile as `include:momery`.
-To install it elsewhere:
+From git (works anywhere, pinned to the tag):
+
+```
+plugin_manager install_bundle "git+https://github.com/Linxuans/memory.git#path:packages/momery&semver:1.1.0"
+```
+
+From a checkout while developing (hot reload through a link):
 
 ```
 plugin_manager install_bundle F:\work\momery\packages\momery
@@ -55,24 +61,9 @@ plugin_manager install_bundle F:\work\momery\packages\momery
 | `memory_write` | note / pending / journal / global rule |
 | `memory_status` | discover projects, counts, activity |
 | `memory_end` | session journal + distilled notes in one call |
+| `memory_curate` | rewrite purpose and durable rules from accumulated notes |
+| `memory_distill` | journal digests + promotion candidates |
 | `memory_reindex` | rebuild generated indexes |
-
-## Design in one paragraph
-
-Markdown notes with YAML-ish frontmatter are the storage; a generated index and a
-bounded card are the always-on surface; lexical scoring with field weights, recency
-decay, and CJK bigrams is the retrieval; the seven tools are the API; a system-prompt
-section plus the `momery` skill make the capability survive context compaction. No
-embeddings, no database, no network - the store stays inspectable, greppable, and
-git-able.
-
-See [docs/architecture.md](docs/architecture.md) for the full design and
-[docs/comparison.md](docs/comparison.md) for prior art.
-## Docs
-
-- [Architecture](docs/architecture.md) - layers, formats, retrieval, context strategy, limits.
-- [Prior art](docs/comparison.md) - Claude Code auto memory, Anthropic `memory_20250818`, claude-mem, MCP memory server, and what changed here.
-- [Runbook (中文)](docs/runbook.zh.md) - installation, daily use, CLI, manual editing, backup, migration, FAQ.
 
 ## CLI
 
@@ -82,17 +73,36 @@ node bin/momery.mjs search "<query>" [--project all|<slug>]
 node bin/momery.mjs brief ["<query>"]
 node bin/momery.mjs read projects/<slug>/MEMORY.md
 node bin/momery.mjs write --title "..." --type decision --tags a,b --content "..."
+node bin/momery.mjs curate --purpose "..." --rules "Use pnpm,Deploy to sin"
+node bin/momery.mjs distill --promote
 node bin/momery.mjs reindex
 ```
+
+## Design in one paragraph
+
+Markdown notes with YAML-ish frontmatter are the storage; a generated index and a
+bounded card are the always-on surface; lexical scoring with field weights, recency
+decay, and CJK bigrams is the retrieval; the nine tools are the API; a system-prompt
+section plus the `momery` skill make the capability survive context compaction. No
+embeddings, no database, no network - the store stays inspectable, greppable, and
+git-able.
+
+## Docs
+
+- [Architecture](docs/architecture.md) - layers, formats, retrieval, context strategy, limits.
+- [Prior art](docs/comparison.md) - Claude Code auto memory, Anthropic `memory_20250818`, claude-mem, MCP memory server, and what changed here.
+- [Runbook (中文)](docs/runbook.zh.md) - installation, daily use, CLI, manual editing, backup, migration, FAQ.
 
 ## Verified
 
 - Bundle installed and active in the `desktop` profile (`include:momery`, `fiberPhase: active`).
 - Tool schemas published to the model; `memory_brief`, `memory_search`, `memory_read`,
-  `memory_write`, `memory_status`, `memory_end`, `memory_reindex` exercised against a live store.
+  `memory_write`, `memory_status`, `memory_end`, `memory_curate`, `memory_distill`,
+  `memory_reindex` exercised against a live store.
 - Cross-project read verified: a session in `F:\work\momery` read `projects/f-work-download/CARD.md`
   and found its notes with `memory_search project="all"`.
-- Card budget, duplicate-title detection, supersession, locks, and reindex covered by local tests.
+- Card budget, duplicate-title detection, supersession, curation, distillation, locks, and
+  reindex covered by local tests.
 
 ## Limits
 

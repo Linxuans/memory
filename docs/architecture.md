@@ -167,6 +167,28 @@ The skill (`momery/SKILL.md`) is progressive disclosure: the catalog shows a one
 description, and the full protocol loads only when the model decides it needs the
 discipline. The tools remain usable without ever loading it.
 
+## Curation and distillation
+
+Two maintenance operations keep the store from rotting, and both separate the mechanical
+part (which the tool does) from the judgment (which the model or the human does).
+
+**Curation** rewrites the two hand-owned sections of `MEMORY.md` - Purpose and Durable
+rules - and rebuilds the card. Rules can be supplied (the model's synthesis) or derived
+from decision, preference, and issue titles as a starting point. Curation is a *replace*,
+not an append: dropping a rule that no longer holds is the point, and the card's byte
+budget is what forces the choice. `dry_run` renders the would-be card without writing.
+
+**Distillation** compresses the narrative without deleting it. Each journal month keeps
+its raw blocks and gains a generated `## Digest` footer of one line per session; a
+`YYYY-MM.digest.md` beside it holds the untruncated digest. `promote=true` returns
+candidates - headline, bullet points, inferred type - that the model can turn into notes.
+Re-running is idempotent: only generated content is rewritten, never the raw blocks.
+
+The division of labour matters. A deterministic pass cannot decide that "we tried X and it
+failed" deserves a note while "we renamed a variable" does not; an LLM pass cannot be
+trusted to preserve raw history. So the tool writes structure, the model writes meaning,
+and the raw journal stays append-only either way.
+
 ## Surviving compaction
 
 - The prompt section is regenerated per step, so it is present after compaction.

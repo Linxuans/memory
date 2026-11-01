@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "momery - durable project memory",
-    "description": "Plain-text long-term memory for coding agents: project cards, ranked recall, cross-project reads, and a session journal that survives context compaction."
+    "description": "Plain-text long-term memory for coding agents: project cards, ranked recall, cross-project reads, curation, journal distillation, and a session journal that survives context compaction."
   },
   "tools": {
     "memory_brief": "Recall the project card and the notes relevant to a task.",
@@ -10,6 +10,8 @@
     "memory_write": "Record durable notes, pending items, journal blocks, and global rules.",
     "memory_status": "List known projects and inspect one project in detail.",
     "memory_end": "Close a session with a journal block and distilled notes.",
+    "memory_curate": "Rewrite the purpose and durable rules from accumulated notes.",
+    "memory_distill": "Distill the journal into digests and promotion candidates.",
     "memory_reindex": "Rebuild the generated memory indexes."
   }
 }

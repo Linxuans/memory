@@ -11,6 +11,8 @@
  *   node bin/momery.mjs pending --project <slug> --file pending.md
  *   node bin/momery.mjs journal --project <slug> --content "..."
  *   node bin/momery.mjs end --project <slug> --summary "..." [--notes notes.json]
+ *   node bin/momery.mjs curate [--purpose "..."] [--rules "a,b" | --rules-file rules.txt] [--dry-run]
+ *   node bin/momery.mjs distill [--promote] [--report-only] [--limit 10]
  *   node bin/momery.mjs reindex [--project <slug>]
  *   node bin/momery.mjs projects
  *
@@ -131,6 +133,30 @@ try {
       await call('memory_end', { project: projectRef, summary, notes })
       break
     }
+    case 'curate': {
+      const rulesArg = take('--rules')
+      const rulesFile = take('--rules-file')
+      const rules = rulesFile
+        ? readFileSync(rulesFile, 'utf8').split(/\r?\n/).map((line) => line.replace(/^[-*]\s+/, '').trim()).filter(Boolean)
+        : rulesArg
+          ? rulesArg.split(',').map((rule) => rule.trim()).filter(Boolean)
+          : undefined
+      await call('memory_curate', {
+        project: projectRef,
+        purpose: take('--purpose'),
+        rules,
+        dry_run: takeBool('--dry-run'),
+      })
+      break
+    }
+    case 'distill':
+      await call('memory_distill', {
+        project: projectRef,
+        promote: takeBool('--promote'),
+        write: !takeBool('--report-only'),
+        limit: Number(take('--limit') ?? 10),
+      })
+      break
     case 'reindex':
       await call('memory_reindex', { project: projectRef })
       break

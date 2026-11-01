@@ -12,7 +12,9 @@ import { basename } from 'node:path'
 import { slugify } from './note.js'
 import {
   appendJournal,
+  curateProject,
   discoverProjects,
+  distillJournal,
   ensureGlobalFiles,
   ensureProject,
   loadRegistry,
@@ -168,6 +170,8 @@ export function buildTools(root, resolveAgent) {
       lines.push('- deeper read: memory_read path="projects/' + record.slug + '/notes/<id>.md" (also MEMORY.md, pending.md, journal/YYYY-MM.md)')
       lines.push('- record knowledge: memory_write kind="note" title="..." type="decision|pattern|issue|fact|preference|task" tags=[...] content="..."')
       lines.push('- close a session: memory_end summary="..." notes=[{title,type,tags,content}]')
+      lines.push('- keep the card sharp: memory_curate rules=[...] purpose="..." (omit rules to synthesize from notes)')
+      lines.push('- tidy the history: memory_distill promote=true, then turn candidates into notes')
       lines.push('- another project: memory_search query="..." project="<slug>" or project="all"')
       lines.push('</memory>')
       lines.push('')
@@ -460,6 +464,105 @@ export function buildTools(root, resolveAgent) {
         'session recorded for ' + record.slug + ': journal ' + relPath(root, journalFile) +
         ', notes written ' + writtenIds.length + ' (' + rendered.notes + ' total), pending ' + rendered.pending + '. Card and indexes refreshed.'
       )
+    },
+  })
+
+  tools.push({
+    name: 'memory_curate',
+    description:
+      'Curate the always-on surface: write the project purpose and the durable rule list into MEMORY.md, then rebuild CARD.md. Pass rules you derived from notes (or omit rules to synthesize a compact list from decisions, preferences, and issues) so the card states what matters instead of accumulating. Use it after a burst of decisions, or when CARD.md reports truncation.',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        project: { type: 'string', description: 'Project slug or alias. Default: current project.' },
+        purpose: { type: 'string', description: 'One-paragraph purpose, replacing the Purpose section.' },
+        rules: { type: 'array', items: { type: 'string' }, description: 'Durable rules, most important first. Omit to synthesize from notes.' },
+        max_decisions: { type: 'integer', description: 'When synthesizing: decisions to include. Default 5, capped at 8.' },
+        max_preferences: { type: 'integer', description: 'When synthesizing: preferences to include. Default 3, capped at 5.' },
+        dry_run: { type: 'boolean', description: 'Show what would be written without writing. Default false.' },
+      },
+    },
+    output: {
+      schema: { type: 'string' },
+      render: (_args, value) => text(String(value)),
+    },
+    async execute(args = {}, exec) {
+      const info = await resolveAgent(exec)
+      const record = currentProject(root, info, args.project)
+      const notes = scanNotes(root, record.slug)
+      const existing = readCard(root, record.slug)
+      const rules = Array.isArray(args.rules) ? args.rules.map((rule) => String(rule).trim()).filter(Boolean) : []
+      let synthesized = false
+      if (!Array.isArray(args.rules)) {
+        synthesized = true
+        const maxDecisions = Math.min(Math.max(args.max_decisions ?? 5, 1), 8)
+        const maxPreferences = Math.min(Math.max(args.max_preferences ?? 3, 1), 5)
+        const decisions = notes.filter((note) => note.type === 'decision').slice(0, maxDecisions)
+        const preferences = notes.filter((note) => note.type === 'preference').slice(0, maxPreferences)
+        const issues = notes.filter((note) => note.type === 'issue').slice(0, 2)
+        for (const note of decisions) rules.push(note.title)
+        for (const note of preferences) rules.push(note.title)
+        for (const note of issues) rules.push('Gotcha: ' + note.title)
+      }
+      if (args.dry_run === true) {
+        return (
+          '<memory_curate project="' + record.slug + '" dry_run="true">\n' +
+          'purpose: ' + (typeof args.purpose === 'string' && args.purpose.trim().length > 0 ? args.purpose.trim() : '(unchanged)') + '\n' +
+          'rules (' + rules.length + '):\n' + (rules.length > 0 ? rules.map((rule) => '- ' + rule).join('\n') : '_none_') + '\n' +
+          'current card:\n' + (existing || '_none_') + '\n</memory_curate>'
+        )
+      }
+      const rendered = curateProject(root, record.slug, { purpose: args.purpose, rules })
+      writeCatalog(root)
+      return (
+        'curated ' + record.slug + ': ' + rules.length + ' rule(s)' + (synthesized ? ' synthesized from notes' : '') +
+        ', purpose ' + (typeof args.purpose === 'string' && args.purpose.trim().length > 0 ? 'updated' : 'unchanged') +
+        '. Wrote ' + relPath(root, rendered.memoryFile) + ' and CARD.md. Call memory_brief to see the new card.'
+      )
+    },
+  })
+
+  tools.push({
+    name: 'memory_distill',
+    description:
+      'Distill the session journal: rewrite each month\'s short digest footer, write journal/YYYY-MM.digest.md beside the raw log, and optionally return promotion candidates (headline, bullet points, inferred type) for notes that deserve to become durable. Run it when the journal grows or before closing a long project.',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        project: { type: 'string', description: 'Project slug or alias. Default: current project.' },
+        write: { type: 'boolean', description: 'Write digest files and footers. Default true; false only reports.' },
+        promote: { type: 'boolean', description: 'Return candidate points to promote into notes. Default false.' },
+        limit: { type: 'integer', description: 'Maximum promotion candidates. Default 10, capped at 30.' },
+      },
+    },
+    output: {
+      schema: { type: 'string' },
+      render: (_args, value) => text(String(value)),
+    },
+    async execute(args = {}, exec) {
+      const info = await resolveAgent(exec)
+      const record = currentProject(root, info, args.project)
+      const outcome = distillJournal(root, record.slug, { write: args.write !== false, promote: args.promote === true })
+      if (args.write !== false) renderProject(root, record.slug)
+      const limit = Math.min(Math.max(args.limit ?? 10, 1), 30)
+      const lines = []
+      lines.push('<memory_distill project="' + record.slug + '" months="' + outcome.months.length + '" candidates="' + Math.min(outcome.candidates.length, limit) + '">')
+      if (outcome.months.length === 0) lines.push('_No journal months yet._')
+      for (const month of outcome.months) {
+        lines.push('- ' + month.month + ': ' + month.sessions + ' session(s)' + (args.write !== false ? ' -> journal/' + month.month + '.digest.md' : ''))
+      }
+      if (args.promote === true && outcome.candidates.length > 0) {
+        lines.push('')
+        lines.push('## Promotion candidates (turn these into notes with memory_write)')
+        for (const candidate of outcome.candidates.slice(0, limit)) {
+          lines.push('- [' + candidate.type + '] ' + candidate.stamp + ' - ' + candidate.headline)
+          for (const point of candidate.points) lines.push('  - ' + point)
+        }
+      }
+      lines.push('</memory_distill>')
+      return lines.join('\n')
     },
   })
 
