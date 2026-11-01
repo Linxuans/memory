@@ -1,5 +1,7 @@
 # momery
 
+[![GitHub release](https://img.shields.io/github/v/release/Linxuans/memory)](https://github.com/Linxuans/memory/releases) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Durable, project-scoped, plain-text long-term memory for AI coding agents, shipped as a
 DeepSeek Harness plugin plus a `momery` skill.
 
@@ -33,6 +35,8 @@ catalog.jsonl             one JSON line per note, machine-readable
 ```
 
 ## Install
+
+Current release: **[v1.0.0](https://github.com/Linxuans/memory/releases/tag/v1.0.0)**.
 
 The bundle is already installed in the `desktop` profile as `include:momery`.
 To install it elsewhere:
