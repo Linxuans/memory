@@ -39,17 +39,31 @@ catalog.jsonl             one JSON line per note, machine-readable
 
 Current release: **[v1.1.0](https://github.com/Linxuans/memory/releases/tag/v1.1.0)**.
 
-From git (works anywhere, pinned to the tag):
+Installed in this profile from git, pinned to the tag:
 
 ```
 plugin_manager install_bundle "git+https://github.com/Linxuans/memory.git#path:packages/momery&semver:1.1.0"
 ```
 
-From a checkout while developing (hot reload through a link):
+A local checkout can be linked instead while developing, which hot-reloads code changes:
 
 ```
 plugin_manager install_bundle F:\work\momery\packages\momery
 ```
+
+Replacing an installed package takes effect after the Harness restarts; a fresh install
+can activate immediately.
+
+### Network note (this machine)
+
+GitHub is only reachable through the local Clash proxy. The plugin manager runs `git`
+itself, so the proxy must be configured for GitHub globally, not only per repository:
+
+```powershell
+git config --global http.https://github.com.proxy http://127.0.0.1:7890
+```
+
+Without it, `install_bundle` fails with `Failed to connect to github.com port 443`.
 
 ## Tools
 
@@ -95,14 +109,11 @@ git-able.
 
 ## Verified
 
-- Bundle installed and active in the `desktop` profile (`include:momery`, `fiberPhase: active`).
-- Tool schemas published to the model; `memory_brief`, `memory_search`, `memory_read`,
-  `memory_write`, `memory_status`, `memory_end`, `memory_curate`, `memory_distill`,
-  `memory_reindex` exercised against a live store.
-- Cross-project read verified: a session in `F:\work\momery` read `projects/f-work-download/CARD.md`
-  and found its notes with `memory_search project="all"`.
-- Card budget, duplicate-title detection, supersession, curation, distillation, locks, and
-  reindex covered by local tests.
+- Installed from git (`git+https://github.com/Linxuans/memory.git#path:packages/momery&semver:1.1.0`)
+  and active in the `desktop` profile.
+- All nine tools published to the model; `memory_curate`, `memory_distill`, cross-project
+  reads, supersession, locks, card budget, and reindex exercised against a live store.
+- `v1.0.0` and `v1.1.0` tagged and released on GitHub.
 
 ## Limits
 
