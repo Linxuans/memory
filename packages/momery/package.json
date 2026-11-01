@@ -1,0 +1,29 @@
+{
+  "name": "@momery/dsh-momery",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Durable, project-scoped, plain-text long-term memory for DeepSeek Harness agents.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./skill": "./skill/SKILL.md"
+  },
+  "files": [
+    "index.js",
+    "lib/*.js",
+    "skill/SKILL.md",
+    "locale/*.json",
+    "icon.svg",
+    "cordis.patch.yml"
+  ],
+  "keywords": ["dsh", "dsh-plugin", "memory", "context", "agent"],
+  "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

@@ -1,0 +1,13 @@
+# momery - durable project memory
+# One Host row registering the memory_* tool family, the `momery` skill, and a short
+# system-prompt section. All state lives in plain files under `memoryRoot`.
+- insert:
+    - id: momery
+      name: '@momery/dsh-momery'
+      config:
+        # Leave memoryRoot unset to use ~/.momery; set an absolute path to relocate.
+        skill: true
+        # Always-on prompt section; it survives compaction, which is the point.
+        promptSection: true
+        # Rebuild every generated index when the profile loads.
+        bootstrap: true
