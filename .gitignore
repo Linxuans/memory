@@ -18,3 +18,6 @@ Desktop.ini
 # this repo's own generated memory store, if someone points MOMERY_ROOT here
 .momery/
 *.log
+
+# temp stores created by tests
+.tmp-*/

@@ -44,26 +44,34 @@ export function apply(ctx, config = {}) {
     }
   }
 
-  /** Project identity of the calling agent's session directory, cached per agent. */
+  /**
+   * Project identity of the calling agent's session directory, cached per agent.
+   *
+   * `workingDirectory.ensure(agent)` is the only directory API that takes an Agent;
+   * `get()` takes a Session, so calling it with an Agent throws inside the Harness
+   * (`session.snapshotEvents is not a function`). Resolve through `ensure` alone, and
+   * treat any failure as "unknown directory" instead of failing the tool call.
+   */
   const resolveAgent = async (exec) => {
     const agent = exec?.agent
+    const cached = agent ? projects.get(agent) : undefined
     if (!agent) return identify(process.cwd())
-    const workingDirectory = hasService(ctx, 'workingDirectory') ? ctx.get('workingDirectory') : undefined
-    // The working directory can change mid-session (`cd`); the cache is keyed on it.
-    const current = workingDirectory ? workingDirectory.get(agent) : undefined
-    const cached = projects.get(agent)
-    if (cached && (current === undefined || current === cached.cwd)) return cached
 
-    let cwd = current ?? null
-    if (workingDirectory && cwd === null) {
+    const workingDirectory = hasService(ctx, 'workingDirectory') ? ctx.get('workingDirectory') : undefined
+    let cwd = null
+    if (workingDirectory) {
       try {
         cwd = await workingDirectory.ensure(agent, exec?.signal)
       } catch {
         cwd = null
       }
     }
-    const info = projectForAgent(root, cwd ?? process.cwd())
-    const entry = { ...info, cwd: cwd ?? info.rootPath }
+    // A session can `cd`; compare the authoritative directory with the cached one.
+    const resolved = typeof cwd === 'string' && cwd.length > 0 ? cwd : cached?.cwd ?? process.cwd()
+    if (cached && cached.cwd === resolved) return cached
+
+    const info = projectForAgent(root, resolved)
+    const entry = { ...info, cwd: resolved }
     projects.set(agent, entry)
     return entry
   }
@@ -78,10 +86,9 @@ export function apply(ctx, config = {}) {
         text: ({ scope }) => {
           const visible = TOOL_NAMES.filter((toolName) => ctx.tools.get(toolName, scope) !== undefined)
           if (visible.length === 0) return ''
-          const cwd = describeWorkingDirectory(ctx, scope)
           return [
             '## Long-term memory (momery)',
-            'You have durable project memory that outlives this conversation. Store: `' + root + '`' + (cwd ? ', current project root: `' + cwd + '`' : '') + '.',
+            'You have durable project memory that outlives this conversation. Store: `' + root + '`.',
             'Before non-trivial work and after any context reset, call `memory_brief` with the task\'s entities or symptom text. Read a specific hit with `memory_read`.',
             'Record durable decisions, constraints, patterns, root-caused issues, and stated preferences with `memory_write` while the evidence is fresh; close the session with `memory_end`.',
             'Other projects\' memory is reachable on purpose: `memory_status` to discover, `memory_search project="all"` to search everything, `memory_read` for details. Load the `momery` skill for the full protocol.',
@@ -89,7 +96,14 @@ export function apply(ctx, config = {}) {
         },
       }),
     )
-    if (registerSkill && hasService(ctx, 'skills')) disposers.push(registerRuntimeSkill(ctx))
+    // A skill-registration failure must not take the tools down with it.
+    if (registerSkill && hasService(ctx, 'skills')) {
+      try {
+        disposers.push(registerRuntimeSkill(ctx))
+      } catch (error) {
+        ctx.logger?.warn?.('momery: skill registration skipped: ' + (error instanceof Error ? error.message : String(error)))
+      }
+    }
     return () => {
       for (const dispose of disposers.reverse()) dispose()
     }
@@ -104,18 +118,6 @@ function hasService(ctx, name) {
   }
 }
 
-function describeWorkingDirectory(ctx, scope) {
-  try {
-    if (!hasService(ctx, 'workingDirectory')) return ''
-    const workingDirectory = ctx.get('workingDirectory')
-    if (!workingDirectory) return ''
-    if (scope === void 0) return ''
-    const directory = workingDirectory.get(scope)
-    return typeof directory === 'string' ? directory : ''
-  } catch {
-    return ''
-  }
-}
 
 /** Register the protocol skill from the packaged SKILL.md, parsed at activation. */
 function registerRuntimeSkill(ctx) {

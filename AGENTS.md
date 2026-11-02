@@ -25,6 +25,10 @@ for AI coding agents, plus its skill, CLI, and docs.
   `export const inject`. Otherwise activation fails with
   `cannot get property "x" without inject`. The empty-object form
   `{ optional: [...] }` makes the Loader wait for a service literally named `optional`.
+- **`ctx.workingDirectory.get()` takes a `Session`, not an `Agent`.** Passing the Agent makes
+  the Harness throw `session.snapshotEvents is not a function` and, if it is not caught, every
+  tool call fails. Resolve directories with `ensure(agent, signal)` only, and treat any failure
+  as "unknown directory". `test/working-directory.mjs` reproduces this.
 - **Tool `parameters` are raw JSON Schema**, with `required` as an array of property names.
   That is *not* `defineTool`'s author DSL (where each property carries `required: true`);
   `tools.register` uses the supplied schema as-is.
@@ -47,6 +51,7 @@ for AI coding agents, plus its skill, CLI, and docs.
 node --check packages/momery/index.js
 node --check packages/momery/lib/tools.js
 node bin/momery.mjs status --root <temp-store>
+node test/working-directory.mjs
 ```
 
 Then exercise `memory_write` -> `memory_brief` -> `memory_search project="all"` ->

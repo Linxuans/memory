@@ -122,6 +122,14 @@ renaming the folder. The plugin caches the resolved project per agent and invali
 that cache when the session directory changes, so cd to another repository mid-session
 switches memory targets instead of writing into the old project.
 
+Directory resolution is the sharp edge. The Harness exposes two calls with different
+receivers: `ensure(agent)` takes an Agent, while `get(session)` takes a Session. Only
+`ensure` is safe for a plugin holding an Agent; calling `get` with an Agent throws
+`session.snapshotEvents is not a function` inside the Harness and, uncaught, fails every
+memory call. The plugin resolves directories through `ensure` only, treats a rejection as
+"unknown", falls back to its cached value or the process directory, and never lets
+directory resolution fail a memory operation.
+
 ## Retrieval
 
 Lexical, deterministic, no model call:
